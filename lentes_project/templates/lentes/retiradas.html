@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Retiradas | Painel de Lentes{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-kicker">Histórico operacional</div>
+        <h1>Retiradas pelo paciente</h1>
+        <div class="page-subtitle">{{ total_retiradas }} registros concluidos no fluxo operacional.</div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'lentes:dashboard' %}" class="btn btn-outline-secondary icon-button-text">
+            <i data-lucide="table-2" aria-hidden="true"></i>
+            Dashboard
+        </a>
+        <a href="{% url 'lentes:kanban' %}" class="btn btn-primary icon-button-text">
+            <i data-lucide="columns-3" aria-hidden="true"></i>
+            Kanban
+        </a>
+    </div>
+</div>
+
+<div class="table-responsive operational-table">
+    <table class="table table-hover align-middle mb-0">
+        <thead>
+            <tr>
+                <th>Paciente</th>
+                <th>Telefone</th>
+                <th>Requisicao</th>
+                <th>Chegada</th>
+                <th>Contato</th>
+                <th>Retirada</th>
+                <th>Usuario contato</th>
+                <th>Usuario retirada</th>
+                <th>Chegada ate contato</th>
+                <th>Contato ate retirada</th>
+                <th>Total requisicao</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                <tr>
+                    <td class="fw-semibold">{{ row.paciente|default:"-" }}</td>
+                    <td>{{ row.telefone|default:"-" }}</td>
+                    <td><code>{{ row.nr_requisicao }}</code></td>
+                    <td>{{ row.dt_chegada_lente|date:"d/m/Y H:i"|default:"-" }}</td>
+                    <td>{{ row.dt_contato|date:"d/m/Y H:i"|default:"-" }}</td>
+                    <td>{{ row.dt_retirada|date:"d/m/Y H:i"|default:"-" }}</td>
+                    <td>{{ row.usuario_contato|default:"-" }}</td>
+                    <td>{{ row.usuario_retirada|default:"-" }}</td>
+                    <td>{{ row.tempo_chegada_contato_label }}</td>
+                    <td>{{ row.tempo_contato_retirada_label }}</td>
+                    <td>{{ row.tempo_total_requisicao_label }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="11" class="text-center text-muted py-5">Nenhuma retirada registrada.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

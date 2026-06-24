@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Kanban | Painel de Lentes{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-kicker">Fluxo operacional por etapa</div>
+        <h1>Kanban de lentes</h1>
+        <div class="page-subtitle">Gerado em {{ generated_at|date:"d/m/Y H:i" }}</div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'lentes:dashboard' %}" class="btn btn-outline-secondary icon-button-text">
+            <i data-lucide="table-2" aria-hidden="true"></i>
+            Voltar ao dashboard
+        </a>
+        <a href="{% url 'lentes:retiradas' %}" class="btn btn-outline-primary icon-button-text">
+            <i data-lucide="history" aria-hidden="true"></i>
+            Retiradas
+        </a>
+        <a href="?refresh=1" class="btn btn-primary icon-button-text">
+            <i data-lucide="refresh-cw" aria-hidden="true"></i>
+            Atualizar
+        </a>
+    </div>
+</div>
+
+<div class="kanban-board">
+    {% for column in kanban_columns %}
+        <section class="kanban-column" aria-label="{{ column.label }}">
+            <div class="kanban-column-header">
+                <h2>{{ column.label }}</h2>
+                <span class="badge text-bg-light">{{ column.items|length }}</span>
+            </div>
+            <div class="kanban-list">
+                {% for item in column.items %}
+                    <article class="kanban-card urgency-{{ item.urgencia.nivel }}">
+                        <div class="d-flex justify-content-between gap-2 align-items-start mb-2">
+                            <h3>{{ item.paciente|default:"Paciente não informado" }}</h3>
+                            <span class="badge {{ item.urgencia.class }}">{{ item.dias_em_status|default_if_none:"-" }}d</span>
+                        </div>
+                        <div class="kanban-meta">
+                            <span><i data-lucide="hash" aria-hidden="true"></i>{{ item.nr_requisicao }}</span>
+                            <span><i data-lucide="phone" aria-hidden="true"></i>{{ item.telefone|default:"-" }}</span>
+                            <span><i data-lucide="calendar-days" aria-hidden="true"></i>{{ item.dt_solicitacao|date:"d/m/Y"|default:"-" }}</span>
+                        </div>
+                        {% if item.foi_contatado %}
+                            <div class="small text-success mt-2">Paciente contatado</div>
+                        {% endif %}
+                        {% if item.foi_retirado %}
+                            <div class="small text-muted mt-2">Retirada confirmada</div>
+                        {% endif %}
+                        {% if item.can_mark_contact %}
+                            <form method="post" action="{% url 'lentes:marcar_paciente_contatado' %}" class="mt-3">
+                                {% csrf_token %}
+                                <input type="hidden" name="nr_requisicao" value="{{ item.nr_requisicao }}">
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary w-100 icon-button-text">
+                                    <i data-lucide="phone-call" aria-hidden="true"></i>
+                                    Marcar contato
+                                </button>
+                            </form>
+                        {% elif item.can_confirm_withdrawal %}
+                            <form method="post" action="{% url 'lentes:confirmar_retirada_paciente' %}" class="mt-3">
+                                {% csrf_token %}
+                                <input type="hidden" name="nr_requisicao" value="{{ item.nr_requisicao }}">
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button type="submit" class="btn btn-sm btn-outline-success w-100 icon-button-text">
+                                    <i data-lucide="check-circle" aria-hidden="true"></i>
+                                    Confirmar retirada
+                                </button>
+                            </form>
+                        {% endif %}
+                    </article>
+                {% empty %}
+                    <div class="kanban-empty">Sem pacientes neste status.</div>
+                {% endfor %}
+            </div>
+        </section>
+    {% endfor %}
+</div>
+{% endblock %}

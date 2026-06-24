@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Painel de Lentes{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-kicker">Centro cirúrgico · Lentes oftalmológicas</div>
+        <h1>Fila operacional</h1>
+        <div class="page-subtitle">
+            Gerado em {{ generated_at|date:"d/m/Y H:i" }}
+            {% if using_sample_data %} · dados de exemplo{% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'lentes:kanban' %}" class="btn btn-primary icon-button-text">
+            <i data-lucide="columns-3" aria-hidden="true"></i>
+            Abrir Kanban
+        </a>
+        <a href="{% url 'lentes:retiradas' %}" class="btn btn-outline-primary icon-button-text">
+            <i data-lucide="history" aria-hidden="true"></i>
+            Retiradas
+        </a>
+        <a href="?refresh=1" class="btn btn-outline-secondary icon-button-text">
+            <i data-lucide="database-zap" aria-hidden="true"></i>
+            Recarregar Oracle
+        </a>
+    </div>
+</div>
+
+<section class="kpi-grid mb-4" aria-label="Indicadores">
+    <div class="kpi-card kpi-card-primary">
+        <div class="kpi-icon"><i data-lucide="activity" aria-hidden="true"></i></div>
+        <span>Total em aberto</span>
+        <strong>{{ kpis.total_em_aberto }}</strong>
+    </div>
+    <div class="kpi-card kpi-card-warning">
+        <div class="kpi-icon"><i data-lucide="shopping-cart" aria-hidden="true"></i></div>
+        <span>Em compra</span>
+        <strong>{{ kpis.em_compra }}</strong>
+    </div>
+    <div class="kpi-card kpi-card-info">
+        <div class="kpi-icon"><i data-lucide="package-check" aria-hidden="true"></i></div>
+        <span>Chegaram hoje</span>
+        <strong>{{ kpis.lentes_chegaram_hoje }}</strong>
+    </div>
+    <div class="kpi-card kpi-card-danger">
+        <div class="kpi-icon"><i data-lucide="siren" aria-hidden="true"></i></div>
+        <span>Atrasadas &gt; 7 dias</span>
+        <strong>{{ kpis.atrasadas }}</strong>
+    </div>
+    <div class="kpi-card kpi-card-info">
+        <div class="kpi-icon"><i data-lucide="phone-outgoing" aria-hidden="true"></i></div>
+        <span>Aguardando contato</span>
+        <strong>{{ kpis.aguardando_contato }}</strong>
+    </div>
+    <div class="kpi-card kpi-card-warning">
+        <div class="kpi-icon"><i data-lucide="user-check" aria-hidden="true"></i></div>
+        <span>Contatados aguardando retirada</span>
+        <strong>{{ kpis.contatados_aguardando_retirada }}</strong>
+    </div>
+    <div class="kpi-card kpi-card-success">
+        <div class="kpi-icon"><i data-lucide="badge-check" aria-hidden="true"></i></div>
+        <span>Retiradas hoje</span>
+        <strong>{{ kpis.retiradas_hoje }}</strong>
+    </div>
+</section>
+
+<form class="filters-bar mb-3" method="get">
+    <div class="filters-main">
+        <div class="input-group">
+            <span class="input-group-text"><i data-lucide="search" aria-hidden="true"></i></span>
+            <input type="search" name="q" class="form-control" placeholder="Buscar paciente, telefone ou requisicao" value="{{ search }}">
+        </div>
+        <select class="form-select" name="status" aria-label="Filtrar por status">
+            <option value="">Todos os status</option>
+            {% for value,label in status_choices %}
+                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-secondary icon-button-text" type="submit">
+            <i data-lucide="filter" aria-hidden="true"></i>
+            Filtrar
+        </button>
+        <a href="{% url 'lentes:dashboard' %}" class="btn btn-outline-secondary icon-button-text">
+            <i data-lucide="x" aria-hidden="true"></i>
+            Limpar
+        </a>
+    </div>
+    <div class="date-filter-grid">
+        <div class="date-filter-group">
+            <label class="form-label" for="dtSolicitacaoInicio">Data de solicitacao</label>
+            <div class="date-range">
+                <input type="date" class="form-control" id="dtSolicitacaoInicio" name="dt_solicitacao_inicio" value="{{ dt_solicitacao_inicio }}">
+                <span>ate</span>
+                <input type="date" class="form-control" name="dt_solicitacao_fim" value="{{ dt_solicitacao_fim }}" aria-label="Data final de solicitacao">
+            </div>
+        </div>
+        <div class="date-filter-group">
+            <label class="form-label" for="dtChegadaInicio">Data de chegada da lente</label>
+            <div class="date-range">
+                <input type="date" class="form-control" id="dtChegadaInicio" name="dt_chegada_inicio" value="{{ dt_chegada_inicio }}">
+                <span>ate</span>
+                <input type="date" class="form-control" name="dt_chegada_fim" value="{{ dt_chegada_fim }}" aria-label="Data final de chegada da lente">
+            </div>
+        </div>
+    </div>
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox" value="1" id="includeRetiradas" name="include_retiradas" {% if include_retiradas %}checked{% endif %}>
+        <label class="form-check-label" for="includeRetiradas">
+            Incluir retiradas pelo paciente
+        </label>
+    </div>
+    <div class="filters-summary">
+        Exibindo {{ filtered_count }} de {{ total_items }} requisicoes carregadas.
+    </div>
+</form>
+
+{% if not oracle_enabled and not using_sample_data %}
+    <div class="alert alert-warning">
+        Oracle desabilitado. Configure as variaveis `ORACLE_*` e `ORACLE_ENABLED=True`, ou ative `LENTES_USE_SAMPLE_DATA=True` para validar a interface em desenvolvimento.
+    </div>
+{% endif %}
+
+<div class="table-responsive operational-table">
+    <table class="table table-hover align-middle mb-0">
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Paciente</th>
+                <th>Requisitante</th>
+                <th>Data solicitação</th>
+                <th>Chegada lente</th>
+                <th>Requisição</th>
+                <th>Telefone</th>
+                <th>Tempo em status</th>
+                <th>Último histórico</th>
+                <th>Urgência</th>
+                <th class="text-end">Ação</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+                <tr>
+                    <td><span class="status-pill {{ item.status_class }}">{{ item.status_label }}</span></td>
+                    <td class="patient-cell">
+                        <div class="fw-semibold">{{ item.paciente|default:"Paciente não informado" }}</div>
+                        <div class="patient-meta">Req. {{ item.nr_requisicao }} · {{ item.telefone|default:"sem telefone" }}</div>
+                        {% if item.foi_contatado %}
+                            <div class="patient-note text-success">
+                                Contatado em {{ item.dt_contato|date:"d/m/Y H:i" }}
+                                {% if item.usuario_contato %}por {{ item.usuario_contato }}{% endif %}
+                            </div>
+                        {% endif %}
+                        {% if item.foi_retirado %}
+                            <div class="patient-note text-muted">
+                                Retirado em {{ item.dt_retirada|date:"d/m/Y H:i" }}
+                                {% if item.usuario_retirada %}por {{ item.usuario_retirada }}{% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.requisitante|default:"-" }}</td>
+                    <td>{{ item.dt_solicitacao|date:"d/m/Y H:i"|default:"-" }}</td>
+                    <td>{{ item.dt_chegada_lente|date:"d/m/Y H:i"|default:"-" }}</td>
+                    <td><code>{{ item.nr_requisicao }}</code></td>
+                    <td>{{ item.telefone|default:"-" }}</td>
+                    <td><span class="time-chip">{{ item.dias_em_status_label }}</span></td>
+                    <td>{{ item.dt_ultima_atualizacao_historico|date:"d/m/Y H:i"|default:"-" }}</td>
+                    <td><span class="urgency-pill {{ item.urgencia.class }}">{{ item.urgencia.label }}</span></td>
+                    <td class="text-end">
+                        {% if item.can_mark_contact %}
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-primary icon-only"
+                                title="Marcar paciente contatado"
+                                data-bs-toggle="modal"
+                                data-bs-target="#contactModal"
+                                data-nr="{{ item.nr_requisicao }}"
+                                data-paciente="{{ item.paciente }}"
+                                data-telefone="{{ item.telefone }}"
+                            >
+                                <i data-lucide="phone-call" aria-hidden="true"></i>
+                                <span class="visually-hidden">Marcar paciente contatado</span>
+                            </button>
+                        {% elif item.can_confirm_withdrawal %}
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-success icon-only"
+                                title="Confirmar retirada pelo paciente"
+                                data-bs-toggle="modal"
+                                data-bs-target="#withdrawalModal"
+                                data-nr="{{ item.nr_requisicao }}"
+                                data-paciente="{{ item.paciente }}"
+                                data-telefone="{{ item.telefone }}"
+                            >
+                                <i data-lucide="check-circle" aria-hidden="true"></i>
+                                <span class="visually-hidden">Confirmar retirada pelo paciente</span>
+                            </button>
+                        {% else %}
+                            <span class="text-muted small">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="11" class="text-center text-muted py-5">Nenhuma requisicao encontrada.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="modal fade" id="contactModal" tabindex="-1" aria-labelledby="contactModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="{% url 'lentes:marcar_paciente_contatado' %}" class="modal-content">
+            {% csrf_token %}
+            <input type="hidden" name="nr_requisicao" id="contactNr">
+            <input type="hidden" name="next" id="contactNext">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="contactModalLabel">Confirmar contato</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Paciente</dt>
+                    <dd class="col-sm-8" id="contactPaciente">-</dd>
+                    <dt class="col-sm-4">Telefone</dt>
+                    <dd class="col-sm-8" id="contactTelefone">-</dd>
+                    <dt class="col-sm-4">Requisição</dt>
+                    <dd class="col-sm-8"><code id="contactNrLabel">-</code></dd>
+                </dl>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary icon-button-text">
+                    <i data-lucide="check" aria-hidden="true"></i>
+                    Confirmar contato
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="withdrawalModal" tabindex="-1" aria-labelledby="withdrawalModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="{% url 'lentes:confirmar_retirada_paciente' %}" class="modal-content">
+            {% csrf_token %}
+            <input type="hidden" name="nr_requisicao" id="withdrawalNr">
+            <input type="hidden" name="next" id="withdrawalNext">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="withdrawalModalLabel">Confirmar retirada</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Paciente</dt>
+                    <dd class="col-sm-8" id="withdrawalPaciente">-</dd>
+                    <dt class="col-sm-4">Telefone</dt>
+                    <dd class="col-sm-8" id="withdrawalTelefone">-</dd>
+                    <dt class="col-sm-4">Requisição</dt>
+                    <dd class="col-sm-8"><code id="withdrawalNrLabel">-</code></dd>
+                </dl>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-success icon-button-text">
+                    <i data-lucide="check-circle" aria-hidden="true"></i>
+                    Confirmar retirada
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const contactModal = document.getElementById("contactModal");
+    if (contactModal) {
+        contactModal.addEventListener("show.bs.modal", (event) => {
+            const button = event.relatedTarget;
+            const nr = button.getAttribute("data-nr") || "";
+            const paciente = button.getAttribute("data-paciente") || "-";
+            const telefone = button.getAttribute("data-telefone") || "-";
+
+            document.getElementById("contactNr").value = nr;
+            document.getElementById("contactNext").value = window.location.href;
+            document.getElementById("contactPaciente").textContent = paciente;
+            document.getElementById("contactTelefone").textContent = telefone || "-";
+            document.getElementById("contactNrLabel").textContent = nr;
+        });
+    }
+
+    const withdrawalModal = document.getElementById("withdrawalModal");
+    if (withdrawalModal) {
+        withdrawalModal.addEventListener("show.bs.modal", (event) => {
+            const button = event.relatedTarget;
+            const nr = button.getAttribute("data-nr") || "";
+            const paciente = button.getAttribute("data-paciente") || "-";
+            const telefone = button.getAttribute("data-telefone") || "-";
+
+            document.getElementById("withdrawalNr").value = nr;
+            document.getElementById("withdrawalNext").value = window.location.href;
+            document.getElementById("withdrawalPaciente").textContent = paciente;
+            document.getElementById("withdrawalTelefone").textContent = telefone || "-";
+            document.getElementById("withdrawalNrLabel").textContent = nr;
+        });
+    }
+</script>
+{% endblock %}
